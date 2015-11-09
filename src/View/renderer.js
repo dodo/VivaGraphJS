@@ -123,12 +123,10 @@ function renderer(graph, settings) {
 
     pause: function() {
       isPaused = true;
-      animationTimer.stop();
     },
 
     resume: function() {
       isPaused = false;
-      animationTimer.restart();
     },
 
     setScale: function(newScale) {
@@ -236,10 +234,10 @@ function renderer(graph, settings) {
   }
 
   function onRenderFrame() {
-    isStable = layout.step() && !userInteraction;
+    if (!isPaused) isStable = layout.step() && !userInteraction;
     renderGraph();
 
-    return !isStable;
+    return isPaused ? true : !isStable;
   }
 
   function renderIterations(iterationsCount) {
