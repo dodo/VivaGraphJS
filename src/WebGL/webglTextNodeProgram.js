@@ -121,7 +121,7 @@ function webglTextNodeProgram(options) {
         h = Math.max(h, glyphs.info[char].h);
         return sum + glyphs.info[char].w;
       }, 0);
-      w *= 0.25; h *= 0.5;
+      w *= 0.5; h *= 0.5;
       nodeUI._version = atlas.version;
       nodeUI._height = h;
       nodeUI._width = w;
@@ -129,29 +129,29 @@ function webglTextNodeProgram(options) {
       w = nodeUI._width;
       h = nodeUI._height;
     }
+    var gh = h * 0.1;
+    var x = pos.x - w * 0.1;
     var idx = offsets[nodeUI.id] * ATTRIBUTES_PER_PRIMITIVE;
     for (var i = 0, o = 0, len = nodeUI.text.length ; i < len; i++) {
       var g = glyphs.info[nodeUI.text.charAt(i)];
-      var x = pos.x - w * 0.1 + o;
-      var gw = g.w * 0.5 * 0.1;
-      var gh = h * 0.1;
+      var gw = g.w * 0.1;
 
-      letters.data[idx +  0] = x - gw;
+      letters.data[idx +  0] = x + o;
       letters.data[idx +  1] = pos.y - gh;
 
-      letters.data[idx +  2] = x + gw;
+      letters.data[idx +  2] = x + o + gw;
       letters.data[idx +  3] = pos.y - gh;
 
-      letters.data[idx +  4] = x - gw;
+      letters.data[idx +  4] = x + o;
       letters.data[idx +  5] = pos.y + gh;
 
-      letters.data[idx +  6] = x - gw;
+      letters.data[idx +  6] = x + o;
       letters.data[idx +  7] = pos.y + gh;
 
-      letters.data[idx +  8] = x + gw;
+      letters.data[idx +  8] = x + o + gw;
       letters.data[idx +  9] = pos.y - gh;
 
-      letters.data[idx + 10] = x + gw;
+      letters.data[idx + 10] = x + o + gw;
       letters.data[idx + 11] = pos.y + gh;
 
       if (new_glyphs) {
@@ -180,7 +180,7 @@ function webglTextNodeProgram(options) {
       }
 
       idx += ATTRIBUTES_PER_PRIMITIVE;
-      o += gw * 2;
+      o += gw;
     }
   }
 
