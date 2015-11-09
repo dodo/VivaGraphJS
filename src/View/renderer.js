@@ -123,10 +123,12 @@ function renderer(graph, settings) {
 
     pause: function() {
       isPaused = true;
+      animationTimer.stop();
     },
 
     resume: function() {
       isPaused = false;
+      animationTimer.restart();
     },
 
     setScale: function(newScale) {
@@ -237,7 +239,7 @@ function renderer(graph, settings) {
     if (!isPaused) isStable = layout.step() && !userInteraction;
     renderGraph();
 
-    return isPaused ? true : !isStable;
+    return isPaused ? userInteraction : !isStable;
   }
 
   function renderIterations(iterationsCount) {
@@ -260,7 +262,7 @@ function renderer(graph, settings) {
   }
 
   function resetStable() {
-    if (isPaused) {
+    if (isPaused && !userInteraction) {
       return;
     }
 
@@ -540,13 +542,20 @@ function renderer(graph, settings) {
           graphics.setCenter({x: stepCx, y: stepCy});
           updateLocalTransform();
 
+          if (isPaused) {
+            userInteraction = true;
+            resetStable();
+          }
           // Kick an iteration in case we're stable
-          if (!isPaused && isStable) {
+          if (isStable) {
             renderGraph();
           }
 
           var finished = elapsed >= animationDuration;
           if (finished) {
+            if (isPaused) {
+              userInteraction = false;
+            }
             zoomAnimationTimer = null;
             graphics.setScale(targetScale);
             graphics.setCenter({ x: targetCx, y: targetCy });
