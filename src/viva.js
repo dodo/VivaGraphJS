@@ -71,11 +71,13 @@ Viva.Graph = {
     // TODO: This should not be even exported
     webglAtlas: require('./WebGL/webglAtlas.js'),
     webglImageNodeProgram: require('./WebGL/webglImageNodeProgram.js'),
+    webglTextNodeProgram: require('./WebGL/webglTextNodeProgram.js'),
     webglLinkProgram: require('./WebGL/webglLinkProgram.js'),
     webglNodeProgram: require('./WebGL/webglNodeProgram.js'),
     webglLine: require('./WebGL/webglLine.js'),
     webglSquare: require('./WebGL/webglSquare.js'),
     webglImage: require('./WebGL/webglImage.js'),
+    webglText: require('./WebGL/webglText.js'),
     webglGraphics: require('./View/webglGraphics.js'),
     // TODO: Deprecate this:
     _webglUtil: {
