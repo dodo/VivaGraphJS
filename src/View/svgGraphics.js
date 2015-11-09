@@ -170,25 +170,89 @@ function svgGraphics() {
             svgContainer.attr("transform", transform);
         },
 
+        /**
+         * Return the center of the graph in SVG coordinates
+         * Can be passed in as-is to setCenter()
+         **/
+        getCenter: function () {
+            var t = svgContainer.getCTM();
+            return {x: t.e, y: t.f};
+        },
+
+        /**
+         * Set the center of the graph in SVG coordinates
+         *
+         * @param center the new center of the graph in clip space coordinates
+         **/
+        setCenter: function (center) {
+          var t = svgContainer.getCTM(),
+              transform = 'matrix(' + t.a + ', 0, 0,' + t.d + ',' + center.x + ',' + center.y + ')';
+          svgContainer.attr('transform', transform);
+        },
+
+        /**
+         * Maintain the center of the viewport through a resize
+         * Note: the SVG and WebGL canvases are resized differently which is why this is graphics dependant
+         *
+         * @param currentCenter the center of the graph prior resize
+         * @param newSize the size of the container post resize
+         * @param previousSize the size of the container prior resize
+         **/
+        preserveCenter: function(currentCenter, newSize, previousSize) {
+          var newCenterX = currentCenter.x + (newSize.width - previousSize.width) / 2;
+          var newCenterY = currentCenter.y + (newSize.height - previousSize.height) / 2;
+          this.setCenter({x: newCenterX, y: newCenterY});
+        },
+
+        /**
+         * Set the absolute scale (i.e. zoom level)
+         *
+         * @param scale the new absolute scale
+         **/
+        setScale: function (scale) {
+            var t = svgContainer.getCTM(),
+                transform = 'matrix(' + scale + ', 0, 0,' + scale + ',' + t.e + ',' + t.f + ')';
+            svgContainer.attr('transform', transform);
+            fireRescaled(this);
+        },
+
+        /**
+         * Multiply the current scale by scaleFactor, optionally moving to scrollPoint before applying the scale
+         * This is used by scroll-to-zoom to give a map-like zoom behaviour
+         * If called with no arguments, return the current scale
+         *
+         * @param scaleFactor the scale multiplier
+         * @param scrollPoint the point in DOM coordinates from which the scale is applied
+         **/
         scale : function (scaleFactor, scrollPoint) {
-            var p = svgRoot.createSVGPoint();
-            p.x = scrollPoint.x;
-            p.y = scrollPoint.y;
+            // If no scaleFactor is passed in return the current scale
+            if (!scaleFactor) { // falsie check is ok because 0 would be an invalid scale
+                return svgContainer.getCTM().a;
+            }
 
-            p = p.matrixTransform(svgContainer.getCTM().inverse()); // translate to SVG coordinates
+            var newCenter = this.getScaleScrollPointCenter(scaleFactor, scrollPoint);
 
-            // Compute new scale matrix in current mouse position
-            var k = svgRoot.createSVGMatrix().translate(p.x, p.y).scale(scaleFactor).translate(-p.x, -p.y),
-                t = svgContainer.getCTM().multiply(k);
-
-            actualScale = t.a;
-            offsetX = t.e;
-            offsetY = t.f;
-            var transform = "matrix(" + t.a + ", 0, 0," + t.d + "," + t.e + "," + t.f + ")";
+            actualScale = svgContainer.getCTM().a * scaleFactor;
+            offsetX = newCenter.x;
+            offsetY = newCenter.y;
+            var transform = "matrix(" + actualScale + ", 0, 0," + t.d + "," + newCenter.x + "," + newCenter.y + ")";
             svgContainer.attr("transform", transform);
 
             fireRescaled(this);
             return actualScale;
+        },
+
+        getScaleScrollPointCenter : function(scaleFactor, scrollPoint) {
+          var p = svgRoot.createSVGPoint();
+          p.x = scrollPoint.x;
+          p.y = scrollPoint.y;
+
+          p = p.matrixTransform(svgContainer.getCTM().inverse()); // translate to SVG coordinates
+
+          // Compute new scale matrix in current mouse position
+          var k = svgRoot.createSVGMatrix().translate(p.x, p.y).scale(scaleFactor).translate(-p.x, -p.y),
+            t = svgContainer.getCTM().multiply(k);
+          return {x: t.e, y: t.f};
         },
 
         resetScale : function () {
@@ -197,6 +261,14 @@ function svgGraphics() {
             svgContainer.attr("transform", transform);
             fireRescaled(this);
             return this;
+        },
+
+        getGraphCenter: function(containerSize, graphRect) {
+          var scale = this.scale();
+          return {
+            x: containerSize.width / 2 - scale * (graphRect.x1 + graphRect.x2) / containerSize.width,
+            y: containerSize.height / 2 + scale * (graphRect.y1 + graphRect.y2) / containerSize.height
+          };
         },
 
        /**

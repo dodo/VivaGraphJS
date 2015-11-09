@@ -33,12 +33,12 @@ var dragndrop = require('../Input/dragndrop.js');
  *     // might depend on it.
  *     container : document.body,
  *
- *     // Defines whether graph can respond to use input
+ *     // Defines whether graph can respond to user input
  *     interactive: true,
  *
  *     // Layout algorithm to be used. The algorithm is expected to comply with defined
  *     // interface and is expected to be iterative. Renderer will use it then to calculate
- *     // grpaph's layout. For examples of the interface refer to Viva.Graph.Layout.forceDirected()
+ *     // graph's layout. For examples of the interface refer to Viva.Graph.Layout.forceDirected()
  *     layout : Viva.Graph.Layout.forceDirected(),
  *
  *     // Directs renderer to display links. Usually rendering links is the slowest part of this
@@ -49,6 +49,9 @@ var dragndrop = require('../Input/dragndrop.js');
  *     // the closer to ideal position graph will appear first time. But be careful: for large graphs
  *     // it can freeze the browser.
  *     prerender : 0
+ *
+ *     // Whether to automatically resize the graph when the window is resized
+ *     autoResize: true
  *   }
  */
 function renderer(graph, settings) {
@@ -64,6 +67,7 @@ function renderer(graph, settings) {
     interactive = settings.interactive !== undefined ? settings.interactive : true,
     inputManager,
     animationTimer,
+    zoomAnimationTimer,
     rendererInitialized = false,
     updateCenterRequired = true,
 
@@ -80,6 +84,7 @@ function renderer(graph, settings) {
     },
 
     publicEvents = eventify({}),
+    containerSize,
     containerDrag;
 
   return {
@@ -126,6 +131,15 @@ function renderer(graph, settings) {
       animationTimer.restart();
     },
 
+    setScale: function(newScale) {
+      graphics.setScale(newScale);
+      updateLocalTransform();
+    },
+
+    updateCenter: function() {
+      updateCenter();
+    },
+
     rerender: function() {
       renderGraph();
       return this;
@@ -145,6 +159,10 @@ function renderer(graph, settings) {
     moveTo: function(x, y) {
       graphics.graphCenterChanged(transform.offsetX - x * transform.scale, transform.offsetY - y * transform.scale);
       renderGraph();
+    },
+
+    onResize: function() {
+      onWindowResized();
     },
 
     /**
@@ -188,7 +206,7 @@ function renderer(graph, settings) {
     container = container || window.document.body;
     layout = layout || forceDirected(graph, {
       springLength: 80,
-      springCoeff: 0.0002,
+      springCoeff: 0.0002
     });
     graphics = graphics || svgGraphics(graph, {
       container: container
@@ -196,6 +214,10 @@ function renderer(graph, settings) {
 
     if (!settings.hasOwnProperty('renderLinks')) {
       settings.renderLinks = true;
+    }
+
+    if (!settings.hasOwnProperty('autoResize')) {
+      settings.autoResize = true;
     }
 
     settings.prerender = settings.prerender || 0;
@@ -258,15 +280,20 @@ function renderer(graph, settings) {
     }
   }
 
+  /**
+   * Center the container on the middle of the graph
+   */
   function updateCenter() {
-    var graphRect = layout.getGraphRect(),
-      containerSize = getDimension(container);
+    // Update container size
+    containerSize = getDimension(container);
 
-    var cx = (graphRect.x2 + graphRect.x1) / 2;
-    var cy = (graphRect.y2 + graphRect.y1) / 2;
-    transform.offsetX = containerSize.width / 2 - (cx * transform.scale - cx);
-    transform.offsetY = containerSize.height / 2 - (cy * transform.scale - cy);
-    graphics.graphCenterChanged(transform.offsetX, transform.offsetY);
+    if (containerSize.width < 1 || containerSize.height < 1) {
+      return;
+    }
+
+    var newCenter = graphics.getGraphCenter(containerSize, layout.getGraphRect());
+    graphics.setCenter(newCenter);
+    updateLocalTransform();
 
     updateCenterRequired = false;
   }
@@ -392,9 +419,40 @@ function renderer(graph, settings) {
     resetStable();
   }
 
+  /**
+   * Sync our local transform from the graph's transform
+   * */
+  function updateLocalTransform() {
+    var center = graphics.getCenter();
+    containerSize = getDimension(container);
+    transform.scale = graphics.scale();
+    transform.offsetX = containerSize.width * (center.x + 1) / 2;
+    transform.offsetY = (1 - center.y) * containerSize.height / 2;
+  }
+
   function onWindowResized() {
-    updateCenter();
+
+    var newSize = getDimension(container);
+    if (!containerSize) {
+      // Unknown previous container size (should not happen)
+      containerSize = newSize;
+    }
+
+    var currentCenter = graphics.getCenter();
+    var previousScale = graphics.scale();
+
+    // Maintain current scale but resize graphics (TODO: expose graphics.updateSize() directly so we don't need to do scale shenanigans)
+    graphics.resetScale(); // this does the resize but also resets the transform
+    graphics.setScale(previousScale);
+
+    // Maintain graph center
+    graphics.preserveCenter(currentCenter, newSize, containerSize);
+
+    updateLocalTransform();
     onRenderFrame();
+
+    // Save size for next round
+    containerSize = newSize;
   }
 
   function releaseContainerDragManager() {
@@ -408,16 +466,17 @@ function renderer(graph, settings) {
     graph.off('changed', onGraphChanged);
   }
 
+  var scaleInFactor = Math.pow(1.4, .2);
+  var scaleOutFactor = Math.pow(1.4, -.2);
   function scale(out, scrollPoint) {
     if (!scrollPoint) {
-      var containerSize = getDimension(container);
+      containerSize = getDimension(container);
       scrollPoint = {
         x: containerSize.width / 2,
         y: containerSize.height / 2
       };
     }
-    var scaleFactor = Math.pow(1 + 0.4, out ? -0.2 : 0.2);
-    transform.scale = graphics.scale(scaleFactor, scrollPoint);
+    transform.scale = graphics.scale(out? scaleOutFactor: scaleInFactor, scrollPoint);
 
     renderGraph();
     publicEvents.fire('scale', transform.scale);
@@ -426,11 +485,14 @@ function renderer(graph, settings) {
   }
 
   function listenToEvents() {
-    windowEvents.on('resize', onWindowResized);
+    if (settings.autoResize) {
+      windowEvents.on('resize', onWindowResized);
+    }
 
     releaseContainerDragManager();
     if (isInteractive('drag')) {
       containerDrag = dragndrop(container);
+      containerSize = getDimension(container);
       containerDrag.onDrag(function(e, offset) {
         graphics.translateRel(offset.x, offset.y);
 
@@ -442,8 +504,58 @@ function renderer(graph, settings) {
       if (!containerDrag) {
         containerDrag = dragndrop(container);
       }
-      containerDrag.onScroll(function(e, scaleOffset, scrollPoint) {
-        scale(scaleOffset < 0, scrollPoint);
+
+      var scrollScaleInFactor = 1.4;
+      var scrollScaleOutFactor = 1 / 1.4;
+      containerDrag.onScroll(function (e, scaleOffset, scrollPoint) {
+        // Update container dimensions
+        containerSize = getDimension(container);
+
+        // Determine target scale
+        var currentScale = graphics.scale();
+        var scaleFactor = scaleOffset < 0 ? scrollScaleOutFactor : scrollScaleInFactor;
+        var targetScale = currentScale * scaleFactor;
+
+        // Determine target center
+        var currentCenter = graphics.getCenter();
+        var currentCx = currentCenter.x;
+        var currentCy = currentCenter.y;
+
+        var newCenter = graphics.getScaleScrollPointCenter(scaleFactor, scrollPoint);
+        var targetCx = newCenter.x;
+        var targetCy = newCenter.y;
+
+        if (zoomAnimationTimer) {
+          // Stop existing animation timer
+          zoomAnimationTimer.stop();
+        }
+
+        var zoomAnimationStart = Date.now();
+        var animationDuration = 150;
+        zoomAnimationTimer = timer(function () {
+          var elapsed = Date.now() - zoomAnimationStart;
+          var progress = elapsed / animationDuration;
+          var stepScale = currentScale + (targetScale - currentScale) * progress;
+          var stepCx = currentCx + (targetCx - currentCx) * progress;
+          var stepCy = currentCy + (targetCy - currentCy) * progress;
+          graphics.setScale(stepScale);
+          graphics.setCenter({x: stepCx, y: stepCy});
+          updateLocalTransform();
+
+          // Kick an iteration in case we're stable
+          if (!isPaused && isStable) {
+            renderGraph();
+          }
+
+          var finished = elapsed >= animationDuration;
+          if (finished) {
+            zoomAnimationTimer = null;
+            graphics.setScale(targetScale);
+            graphics.setCenter({ x: targetCx, y: targetCy });
+            updateLocalTransform();
+          }
+          return !finished;
+        }, 1000 / 16);
       });
     }
 

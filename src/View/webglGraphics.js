@@ -68,6 +68,15 @@ function webglGraphics(options) {
         linkUIBuilder = function (link) {
             return webglLine(0xb3b3b3ff);
         },
+
+        /** Log the weird WebGL column based transform array as a conventional transform matrix */
+        logTransform = function() {
+          var ret = '\n';
+          for (var i = 0; i < 4; i++) {
+            ret += transform[0 + i] + '\t' + transform[4 + i] + '\t' + transform[8 + i] + '\t' + transform[12 + i] + '\n';
+          }
+          console.log(ret);
+        },
 /*jshint unused: true */
         updateTransformUniform = function () {
             linkProgram.updateTransform(transform);
@@ -257,16 +266,70 @@ function webglGraphics(options) {
             updateTransformUniform();
         },
 
+        /**
+         * Return the center of the graph in clip space coordinates
+         * Can be passed in as-is to setCenter()
+         * */
+        getCenter: function () {
+            return {x: transform[12], y: transform[13]};
+        },
+
+        /**
+         * Set the center of the graph in clip space coordinates
+         *
+         * @param center the new center of the graph in clip space coordinates
+         * */
+        setCenter: function (center) {
+            // We only have linear transforms on the X and Y axes
+            transform[12] = center.x;
+            transform[13] = center.y;
+            updateTransformUniform();
+        },
+
+        /**
+         * Maintain the center of the viewport through a resize
+         * Note: the SVG and WebGL canvases are resized differently which is why this is graphics dependant
+         *
+         * @param currentCenter the center of the graph prior resize
+         * @param newSize the size of the container post resize
+         * @param previousSize the size of the container prior resize
+         * */
+        preserveCenter: function(currentCenter, newSize, previousSize) {
+            var newCenterX = currentCenter.x * (previousSize.width / newSize.width);
+            var newCenterY = currentCenter.y * (previousSize.height / newSize.height);
+            this.setCenter({x: newCenterX, y: newCenterY});
+        },
+
+        /**
+         * Set the absolute scale (i.e. zoom level)
+         *
+         * @param scale the new absolute scale
+         * */
+        setScale: function (scale) {
+            // We only have linear transforms on the X and Y axes
+            transform[0] = scale;
+            transform[5] = scale;
+            updateTransformUniform();
+            fireRescaled(this);
+        },
+
+        /**
+         * Multiply the current scale by scaleFactor, optionally moving to scrollPoint before applying the scale
+         * This is used by scroll-to-zoom to give a map-like zoom behaviour
+         * If called with no arguments, return the current scale
+         *
+         * @param scaleFactor the scale multiplier
+         * @param scrollPoint the point in DOM coordinates from which the scale is applied
+         * */
         scale : function (scaleFactor, scrollPoint) {
-            // Transform scroll point to clip-space coordinates:
-            var cx = 2 * scrollPoint.x / width - 1,
-                cy = 1 - (2 * scrollPoint.y) / height;
+            // If no scaleFactor is passed in return the current scale
+            if (!scaleFactor) { // falsie check is ok because 0 would be an invalid scale
+                return transform[0];
+            }
 
-            cx -= transform[12];
-            cy -= transform[13];
-
-            transform[12] += cx * (1 - scaleFactor);
-            transform[13] += cy * (1 - scaleFactor);
+            if (scrollPoint) {
+              this.setCenter(this.getScaleScrollPointCenter(scaleFactor, scrollPoint));
+            }
 
             transform[0] *= scaleFactor;
             transform[5] *= scaleFactor;
@@ -275,6 +338,30 @@ function webglGraphics(options) {
             fireRescaled(this);
 
             return transform[0];
+        },
+
+        getScaleScrollPointCenter : function(scaleFactor, scrollPoint) {
+          var currentCenter = this.getCenter();
+
+          // Transform scroll point to clip-space coordinates:
+          var cx = 2 * scrollPoint.x / width - 1,
+              cy = 1 - (2 * scrollPoint.y) / height;
+
+          cx -= currentCenter.x;
+          cy -= currentCenter.y;
+
+          return {
+            x: currentCenter.x + cx * (1 - scaleFactor),
+            y: currentCenter.y + cy * (1 - scaleFactor)
+          };
+        },
+
+        getGraphCenter: function(containerSize, graphRect) {
+          var scale = this.scale();
+          return {
+            x: -scale * (graphRect.x1 + graphRect.x2) / containerSize.width,
+            y: scale * (graphRect.y1 + graphRect.y2) / containerSize.height
+          };
         },
 
         resetScale : function () {
