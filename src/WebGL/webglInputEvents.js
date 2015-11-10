@@ -102,7 +102,14 @@ function webglInputEvents(webglGraphics) {
   }
 
   function preciseCheck(nodeUI, x, y) {
-    if (nodeUI && nodeUI.size) {
+    if (nodeUI && nodeUI.width && nodeUI.height) {
+      var pos = nodeUI.position,
+        halfh = nodeUI.height * 0.5;
+        halfw = nodeUI.width * 0.5;
+
+      return pos.x - halfw < x && x < pos.x + halfw &&
+        pos.y - halfh < y && y < pos.y + halfh;
+    } else if (nodeUI && nodeUI.size) {
       var pos = nodeUI.position,
         half = nodeUI.size;
 

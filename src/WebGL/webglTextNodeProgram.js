@@ -121,14 +121,14 @@ function webglTextNodeProgram(options) {
         h = Math.max(h, glyphs.info[char].h);
         return sum + glyphs.info[char].w;
       }, 0);
-      w *= 0.5; h *= 0.5;
       nodeUI._version = atlas.version;
-      nodeUI._height = h;
-      nodeUI._width = w;
+      nodeUI.height = h * 0.1;
+      nodeUI.width = w * 0.1;
     } else {
-      w = nodeUI._width;
-      h = nodeUI._height;
+      w = nodeUI.width * 10;
+      h = nodeUI.height * 10;
     }
+    w *= 0.5; h *= 0.5;
     var gh = h * 0.1;
     var x = pos.x - w * 0.1;
     var idx = offsets[nodeUI.id] * ATTRIBUTES_PER_PRIMITIVE;
