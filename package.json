@@ -33,6 +33,7 @@
     "vinyl-source-stream": "^1.0.0"
   },
   "dependencies": {
+    "font-atlas": "https://github.com/dodo/font-atlas/archive/master.tar.gz",
     "gintersect": "0.1.0",
     "ngraph.centrality": "0.1.3",
     "ngraph.events": "0.0.3",
